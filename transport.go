@@ -28,29 +28,37 @@ func (r *RPC) Respond(resp interface{}, err error) {
 type Transport interface {
 	// Consumer returns a channel that can be used to
 	// consume and respond to RPC requests.
+	// 返回一个通道，用于消费和应答rpc请求
 	Consumer() <-chan RPC
 
 	// LocalAddr is used to return our local address to distinguish from our peers.
+	// 用于返回本地地址
 	LocalAddr() ServerAddress
 
 	// AppendEntriesPipeline returns an interface that can be used to pipeline
 	// AppendEntries requests.
+	// 返回一个管道化追加条目的接口
 	AppendEntriesPipeline(id ServerID, target ServerAddress) (AppendPipeline, error)
 
 	// AppendEntries sends the appropriate RPC to the target node.
+	// 发送合适的RPC到目标节点
 	AppendEntries(id ServerID, target ServerAddress, args *AppendEntriesRequest, resp *AppendEntriesResponse) error
 
 	// RequestVote sends the appropriate RPC to the target node.
+	// 发送合适的RPC到目标节点
 	RequestVote(id ServerID, target ServerAddress, args *RequestVoteRequest, resp *RequestVoteResponse) error
 
 	// InstallSnapshot is used to push a snapshot down to a follower. The data is read from
 	// the ReadCloser and streamed to the client.
+	// 用于将镜像推送给一个follower
 	InstallSnapshot(id ServerID, target ServerAddress, args *InstallSnapshotRequest, resp *InstallSnapshotResponse, data io.Reader) error
 
 	// EncodePeer is used to serialize a peer's address.
+	// 序列化peer的地址
 	EncodePeer(id ServerID, addr ServerAddress) []byte
 
 	// DecodePeer is used to deserialize a peer's address.
+	// 反序列化peer的地址
 	DecodePeer([]byte) ServerAddress
 
 	// SetHeartbeatHandler is used to setup a heartbeat handler

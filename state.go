@@ -41,30 +41,35 @@ func (s RaftState) String() string {
 // raftState is used to maintain various state variables
 // and provides an interface to set/get the variables in a
 // thread safe manner.
+// raftState用来维护状态变量，提供线程安全的set/get操作接口，
 type raftState struct {
 	// currentTerm commitIndex, lastApplied,  must be kept at the top of
 	// the struct so they're 64 bit aligned which is a requirement for
 	// atomic ops on 32 bit platforms.
 
 	// The current term, cache of StableStore
+	// 当前任期号，通过任期号的大小与其它Candidate竞争Leader
 	currentTerm uint64
 
 	// Highest committed log entry
+	// 已提交的最新的一条日志索引
 	commitIndex uint64
 
 	// Last applied log to the FSM
+	// FSM接受的最新日志索引
 	lastApplied uint64
 
 	// protects 4 next fields
 	lastLock sync.Mutex
 
 	// Cache the latest snapshot index/term
-	lastSnapshotIndex uint64
-	lastSnapshotTerm  uint64
+	lastSnapshotIndex uint64 // 最新镜像的索引号
+	lastSnapshotTerm  uint64 // 最新镜像的任期号
 
 	// Cache the latest log from LogStore
-	lastLogIndex uint64
-	lastLogTerm  uint64
+	// LogStore:用来存储raft的日志
+	lastLogIndex uint64 // LogStore中的最新日志的索引号
+	lastLogTerm  uint64 // LogStore中的最新日志的任期号
 
 	// Tracks running goroutines
 	routinesGroup sync.WaitGroup
@@ -76,6 +81,9 @@ type raftState struct {
 func (r *raftState) getState() RaftState {
 	stateAddr := (*uint32)(&r.state)
 	return RaftState(atomic.LoadUint32(stateAddr))
+
+	// 为何不这么写？ 从代码可读性上考虑的？
+	// return RaftState(atomic.LoadUint32((*uint32)(&r.state)))
 }
 
 func (r *raftState) setState(s RaftState) {

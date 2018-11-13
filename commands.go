@@ -21,18 +21,18 @@ type AppendEntriesRequest struct {
 	RPCHeader
 
 	// Provide the current term and leader
-	Term   uint64
-	Leader []byte
+	Term   uint64 //领导人的任期号
+	Leader []byte //领导人的 id，为了其他服务器能重定向到客户端
 
 	// Provide the previous entries for integrity checking
-	PrevLogEntry uint64
-	PrevLogTerm  uint64
+	PrevLogEntry uint64 // 最新日志之前的日志的索引值
+	PrevLogTerm  uint64 // 最新日志之前的日志的领导人任期号
 
 	// New entries to commit
-	Entries []*Log
+	Entries []*Log   // 将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条）
 
 	// Commit index on the leader
-	LeaderCommitIndex uint64
+	LeaderCommitIndex uint64  // 领导人提交的日志条目索引值
 }
 
 // See WithRPCHeader.
@@ -56,6 +56,7 @@ type AppendEntriesResponse struct {
 
 	// There are scenarios where this request didn't succeed
 	// but there's no need to wait/back-off the next attempt.
+	// 有些情况下，这个请求没有成功，但也不需要进行等待或进行下一次尝试
 	NoRetryBackoff bool
 }
 

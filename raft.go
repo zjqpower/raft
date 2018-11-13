@@ -70,6 +70,7 @@ func getSnapshotVersion(protocolVersion ProtocolVersion) SnapshotVersion {
 
 // commitTuple is used to send an index that was committed,
 // with an optional associated future that should be invoked.
+// commitTuple用于发送一个已提交的日志，和一个可选的logFuture
 type commitTuple struct {
 	log    *Log
 	future *logFuture
@@ -960,11 +961,11 @@ func (r *Raft) processRPC(rpc RPC) {
 	}
 
 	switch cmd := rpc.Command.(type) {
-	case *AppendEntriesRequest:
+	case *AppendEntriesRequest: // 追加日志
 		r.appendEntries(rpc, cmd)
-	case *RequestVoteRequest:
+	case *RequestVoteRequest:   // 选举
 		r.requestVote(rpc, cmd)
-	case *InstallSnapshotRequest:
+	case *InstallSnapshotRequest: // 镜像
 		r.installSnapshot(rpc, cmd)
 	default:
 		r.logger.Printf("[ERR] raft: Got unexpected command: %#v", rpc.Command)
@@ -975,6 +976,8 @@ func (r *Raft) processRPC(rpc RPC) {
 // processHeartbeat is a special handler used just for heartbeat requests
 // so that they can be fast-pathed if a transport supports it. This must only
 // be called from the main thread.
+// processHeartbeat是只用于心跳请求的特殊处理程序，因此如果传输支持它，则可以对
+// 它们进行快速路由。这只能从主线程调用。
 func (r *Raft) processHeartbeat(rpc RPC) {
 	defer metrics.MeasureSince([]string{"raft", "rpc", "processHeartbeat"}, time.Now())
 
@@ -997,6 +1000,7 @@ func (r *Raft) processHeartbeat(rpc RPC) {
 
 // appendEntries is invoked when we get an append entries RPC call. This must
 // only be called from the main thread.
+// 收到追加条目rpc请求时调用此函数。
 func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 	defer metrics.MeasureSince([]string{"raft", "rpc", "appendEntries"}, time.Now())
 	// Setup a response
@@ -1013,12 +1017,14 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 	}()
 
 	// Ignore an older term
+	// 忽略旧任期的请求
 	if a.Term < r.getCurrentTerm() {
 		return
 	}
 
 	// Increase the term if we see a newer one, also transition to follower
 	// if we ever get an appendEntries call
+	// 如果发现一个更新的任期，则更新自己的任期，并将自己设置为follower
 	if a.Term > r.getCurrentTerm() || r.getState() != Follower {
 		// Ensure transition to follower
 		r.setState(Follower)
@@ -1027,6 +1033,7 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 	}
 
 	// Save the current leader
+	// 保存最新的leader
 	r.setLeader(ServerAddress(r.trans.DecodePeer(a.Leader)))
 
 	// Verify the last log entry
@@ -1099,11 +1106,13 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 			}
 
 			// Handle any new configuration changes
+			// 处理配置变更
 			for _, newEntry := range newEntries {
 				r.processConfigurationLogEntry(newEntry)
 			}
 
 			// Update the lastLog
+			// 更新最新日志信息
 			last := newEntries[n-1]
 			r.setLastLog(last.Index, last.Term)
 		}
@@ -1140,6 +1149,7 @@ func (r *Raft) processConfigurationLogEntry(entry *Log) {
 		r.configurations.latest = decodeConfiguration(entry.Data)
 		r.configurations.latestIndex = entry.Index
 	} else if entry.Type == LogAddPeerDeprecated || entry.Type == LogRemovePeerDeprecated {
+		// 兼容旧协议
 		r.configurations.committed = r.configurations.latest
 		r.configurations.committedIndex = r.configurations.latestIndex
 		r.configurations.latest = decodePeers(entry.Data, r.trans)
@@ -1363,6 +1373,7 @@ func (r *Raft) installSnapshot(rpc RPC, req *InstallSnapshotRequest) {
 }
 
 // setLastContact is used to set the last contact time to now
+// 更新联系时间
 func (r *Raft) setLastContact() {
 	r.lastContactLock.Lock()
 	r.lastContact = time.Now()

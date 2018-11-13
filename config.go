@@ -128,70 +128,89 @@ type Config struct {
 
 	// HeartbeatTimeout specifies the time in follower state without
 	// a leader before we attempt an election.
+	// 心跳超时时间，超时后follower将自身设为candidate，尝试进行选举
 	HeartbeatTimeout time.Duration
 
 	// ElectionTimeout specifies the time in candidate state without
 	// a leader before we attempt an election.
+	// 选举超时时间
 	ElectionTimeout time.Duration
 
 	// CommitTimeout controls the time without an Apply() operation
 	// before we heartbeat to ensure a timely commit. Due to random
 	// staggering, may be delayed as much as 2x this value.
+	// 提交超时时间
 	CommitTimeout time.Duration
 
 	// MaxAppendEntries controls the maximum number of append entries
 	// to send at once. We want to strike a balance between efficiency
 	// and avoiding waste if the follower is going to reject because of
 	// an inconsistent log.
+	// 一次可以追加的最大条目数
 	MaxAppendEntries int
 
 	// If we are a member of a cluster, and RemovePeer is invoked for the
 	// local node, then we forget all peers and transition into the follower state.
 	// If ShutdownOnRemove is is set, we additional shutdown Raft. Otherwise,
 	// we can become a leader of a cluster containing only this node.
+	// 如果我们是集群的成员，并且本地节点调用了RemovePeer，那么我们就会忘记所有对等节点，
+	// 并转换到follower状态。如果ShutdownOnRemove被设置了，我们转换到shutdown状态。否则，
+	// 我们可以成为只包含这个节点的集群的领导者。
 	ShutdownOnRemove bool
 
 	// TrailingLogs controls how many logs we leave after a snapshot. This is
 	// used so that we can quickly replay logs on a follower instead of being
 	// forced to send an entire snapshot.
+	// 拖尾日志控制了在一次镜像后能保留多少条日志。这个对于follower节点快速回放日志非常有用，
+	// 不用在发送完整镜像了。
 	TrailingLogs uint64
 
 	// SnapshotInterval controls how often we check if we should perform a snapshot.
 	// We randomly stagger between this value and 2x this value to avoid the entire
 	// cluster from performing a snapshot at once.
+	// 检查是否需要进行snapshot的间隔。
+	// 随机在[1-2倍SnapshotInterval]选择一个时间作为检查间隔，以避免整个集群同时开始snapshot
 	SnapshotInterval time.Duration
 
 	// SnapshotThreshold controls how many outstanding logs there must be before
 	// we perform a snapshot. This is to prevent excessive snapshots when we can
 	// just replay a small set of logs.
+	// SnapshotThreshold定义了有多少日志才能进行snapshot。避免频繁进行snapshot
 	SnapshotThreshold uint64
 
 	// LeaderLeaseTimeout is used to control how long the "lease" lasts
 	// for being the leader without being able to contact a quorum
 	// of nodes. If we reach this interval without contact, we will
 	// step down as leader.
+	// 当leader与法定数量的节点失去联系后，leader租约的超时时间，超时后将辞去leader
+	// 注：LeaderLeaseTimeout不能大于HeartbeatTimeout
 	LeaderLeaseTimeout time.Duration
 
 	// StartAsLeader forces Raft to start in the leader state. This should
 	// never be used except for testing purposes, as it can cause a split-brain.
+	// 以leader角色启动，只应用于测试目的，因为可能导致脑裂。
 	StartAsLeader bool
 
 	// The unique ID for this server across all time. When running with
 	// ProtocolVersion < 3, you must set this to be the same as the network
 	// address of your transport.
+	// 服务器唯一标识
 	LocalID ServerID
 
 	// NotifyCh is used to provide a channel that will be notified of leadership
 	// changes. Raft will block writing to this channel, so it should either be
 	// buffered or aggressively consumed.
+	// NotifyCh提供了一个通知leadership变化的通道。
 	NotifyCh chan<- bool
 
 	// LogOutput is used as a sink for logs, unless Logger is specified.
 	// Defaults to os.Stderr.
+	// LogOutput：日志接收器， 默认是os.Stderr
 	LogOutput io.Writer
 
 	// Logger is a user-provided logger. If nil, a logger writing to LogOutput
 	// is used.
+	// 日志
 	Logger *log.Logger
 }
 
@@ -211,7 +230,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-// ValidateConfig is used to validate a sane configuration
+// ValidateConfig is used to validate a sane(正常) configuration
 func ValidateConfig(config *Config) error {
 	// We don't actually support running as 0 in the library any more, but
 	// we do understand it.

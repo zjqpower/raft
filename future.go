@@ -132,6 +132,7 @@ type bootstrapFuture struct {
 
 // logFuture is used to apply a log entry and waits until
 // the log is considered committed.
+// 用于接收一个日志条目，并等待直到日志被确认提交
 type logFuture struct {
 	deferError
 	log      Log

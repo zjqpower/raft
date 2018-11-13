@@ -1,18 +1,22 @@
 package raft
 
 // LogType describes various types of log entries.
+// LogType描述了各种各样的log entries
 type LogType uint8
 
 const (
 	// LogCommand is applied to a user FSM.
+	// FSM需要处理的LogCommand
 	LogCommand LogType = iota
 
 	// LogNoop is used to assert leadership.
+	// 用于维护领导关系
 	LogNoop
 
 	// LogAddPeer is used to add a new peer. This should only be used with
 	// older protocol versions designed to be compatible with unversioned
 	// Raft servers. See comments in config.go for details.
+	// 仅用于兼容旧协议版本（被设计用于兼容没有版本控制的raft服务器）
 	LogAddPeerDeprecated
 
 	// LogRemovePeer is used to remove an existing peer. This should only be
@@ -25,11 +29,13 @@ const (
 	// once committed, it only returns once the FSM manager acks it. Otherwise
 	// it is possible there are operations committed but not yet applied to
 	// the FSM.
+	// 用于确认所有前面的操作都已经被FSM应用。与LogNoop类似
 	LogBarrier
 
 	// LogConfiguration establishes a membership change configuration. It is
 	// created when a server is added, removed, promoted, etc. Only used
 	// when protocol version 1 or greater is in use.
+	// 配置变更。当有服务器加入、移出、提升等情况是，会创建此类型log请求。
 	LogConfiguration
 )
 

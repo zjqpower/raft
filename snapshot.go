@@ -66,6 +66,7 @@ type SnapshotSink interface {
 // runSnapshots is a long running goroutine used to manage taking
 // new snapshots of the FSM. It runs in parallel to the FSM and
 // main goroutines, so that snapshots do not block normal operation.
+// runSnapshots是一个长时间运行的协程，用于管理FSM的新快照。它与FSM和主GROUTIN并行运行，这样快照不会阻止正常操作。
 func (r *Raft) runSnapshots() {
 	for {
 		select {
@@ -100,6 +101,7 @@ func (r *Raft) runSnapshots() {
 
 // shouldSnapshot checks if we meet the conditions to take
 // a new snapshot.
+// 检查是否满足进行快照的条件
 func (r *Raft) shouldSnapshot() bool {
 	// Check the last snapshot index
 	lastSnap, _ := r.getLastSnapshot()

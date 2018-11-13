@@ -16,37 +16,46 @@ import (
 var (
 	// ErrLeader is returned when an operation can't be completed on a
 	// leader node.
+	// 当一个操作在leader节点无法完成时，返回ErrLeader错误
 	ErrLeader = errors.New("node is the leader")
 
 	// ErrNotLeader is returned when an operation can't be completed on a
 	// follower or candidate node.
+	// 当一个操作在follower或candidate节点无法完成时，返回ErrNotLeader错误
 	ErrNotLeader = errors.New("node is not the leader")
 
 	// ErrLeadershipLost is returned when a leader fails to commit a log entry
 	// because it's been deposed in the process.
+	// 当一个leader在处理过程中因为被避免leader职务而导致提交日志条目失败时，返回ErrLeadershipLost错误
 	ErrLeadershipLost = errors.New("leadership lost while committing log")
 
 	// ErrAbortedByRestore is returned when a leader fails to commit a log
-	// entry because it's been superseded by a user snapshot restore.
+	// entry because it's been superseded（作废） by a user snapshot restore.
+	// 当一个leader因为镜像恢复而导致提交日志条目失败时，返回ErrAbortedByRestore
 	ErrAbortedByRestore = errors.New("snapshot restored while committing log")
 
 	// ErrRaftShutdown is returned when operations are requested against an
 	// inactive Raft.
+	// 当raft故障时请求操作，返回ErrRaftShutdown错误
 	ErrRaftShutdown = errors.New("raft is already shutdown")
 
 	// ErrEnqueueTimeout is returned when a command fails due to a timeout.
+	// 当命令执行超时时，返回ErrEnqueueTimeout错误
 	ErrEnqueueTimeout = errors.New("timed out enqueuing operation")
 
 	// ErrNothingNewToSnapshot is returned when trying to create a snapshot
-	// but there's nothing new commited to the FSM since we started.
+	// but there's nothing new commited to the FSM（有限状态自动机） since we started.
+	// 当尝试创建镜像时发现在启动后并没有新的提交到FSM，返回ErrNothingNewToSnapshot错误
 	ErrNothingNewToSnapshot = errors.New("nothing new to snapshot")
 
 	// ErrUnsupportedProtocol is returned when an operation is attempted
 	// that's not supported by the current protocol version.
+	// 当试图进行一个当前协议并不支持的操作时，返回ErrUnsupportedProtocol错误
 	ErrUnsupportedProtocol = errors.New("operation not supported with current protocol version")
 
 	// ErrCantBootstrap is returned when attempt is made to bootstrap a
 	// cluster that already has state present.
+	// 当尝试在一个已经状态一致的集群中进行bootstrap操作，返回ErrCantBootstrap
 	ErrCantBootstrap = errors.New("bootstrap only works on new clusters")
 )
 
@@ -61,9 +70,11 @@ type Raft struct {
 
 	// applyCh is used to async send logs to the main thread to
 	// be committed and applied to the FSM.
+	// applyCh用于异步发送日志到主线程，提交到FSM
 	applyCh chan *logFuture
 
 	// Configuration provided at Raft initialization
+	// 初始配置
 	conf Config
 
 	// FSM is the client state machine to apply commands to
@@ -76,54 +87,70 @@ type Raft struct {
 	// restores so that we finish applying any old log applies before we
 	// take a user snapshot on the leader, otherwise we might restore the
 	// snapshot and apply old logs to it that were in the pipe.
+	// fsmMutateCh用于发送状态变更，更新fsm。
 	fsmMutateCh chan interface{}
 
 	// fsmSnapshotCh is used to trigger a new snapshot being taken
+	// fsmSnapshotCh用于触发一次新的snapshot
 	fsmSnapshotCh chan *reqSnapshotFuture
 
 	// lastContact is the last time we had contact from the
 	// leader node. This can be used to gauge staleness.
+	// 最近一次和leader节点的联系时间。
+	// 用于判断是否超时
 	lastContact     time.Time
 	lastContactLock sync.RWMutex
 
 	// Leader is the current cluster leader
+	// 当前集群的leader节点地址
 	leader     ServerAddress
 	leaderLock sync.RWMutex
 
 	// leaderCh is used to notify of leadership changes
+	// leaderCh用于通知leader的变化
 	leaderCh chan bool
 
 	// leaderState used only while state is leader
+	// leader状态，当节点为leader是有效
 	leaderState leaderState
 
 	// Stores our local server ID, used to avoid sending RPCs to ourself
+	// 自身的服务器ID
 	localID ServerID
 
 	// Stores our local addr
 	localAddr ServerAddress
 
 	// Used for our logging
+	// 用于记录日志 - 程序运行日志
 	logger *log.Logger
 
 	// LogStore provides durable storage for logs
+	// 提供日志的持久存储
 	logs LogStore
 
 	// Used to request the leader to make configuration changes.
+	// 用于请求leader进行配置变更
 	configurationChangeCh chan *configurationChangeFuture
 
 	// Tracks the latest configuration and latest committed configuration from
 	// the log/snapshot.
+	// 配置变更要分两阶段进行，在论文中有提。
+	// 已提交的配置和最新配置
 	configurations configurations
 
 	// RPC chan comes from the transport layer
+	// rpc通道  传输层
 	rpcCh <-chan RPC
 
 	// Shutdown channel to exit, protected to prevent concurrent exits
+	// 关闭通道退出，通过锁来防止并发退出
 	shutdown     bool
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
 
 	// snapshots is used to store and retrieve snapshots
+	// snapshots用于存储和恢复镜像
 	snapshots SnapshotStore
 
 	// userSnapshotCh is used for user-triggered snapshots
@@ -135,6 +162,7 @@ type Raft struct {
 
 	// stable is a StableStore implementation for durable state
 	// It provides stable storage for many fields in raftState
+	// 为保存持久状态而实现的一个稳定存储器
 	stable StableStore
 
 	// The transport layer we use
@@ -142,10 +170,12 @@ type Raft struct {
 
 	// verifyCh is used to async send verify futures to the main thread
 	// to verify we are still the leader
+	// 异步发送检查到主线程，检查我们是否还是leader
 	verifyCh chan *verifyFuture
 
 	// configurationsCh is used to get the configuration data safely from
 	// outside of the main thread.
+	// 安全获取配置数据的通道
 	configurationsCh chan *configurationsFuture
 
 	// bootstrapCh is used to attempt an initial bootstrap from outside of
@@ -154,6 +184,7 @@ type Raft struct {
 
 	// List of observers and the mutex that protects them. The observers list
 	// is indexed by an artificial ID which is used for deregistration.
+	// 观察者列表
 	observersLock sync.RWMutex
 	observers     map[uint64]*Observer
 }
@@ -167,6 +198,8 @@ type Raft struct {
 // One sane approach is to bootstrap a single server with a configuration
 // listing just itself as a Voter, then invoke AddVoter() on it to add other
 // servers to the cluster.
+
+// 初始化服务器的集群配置。必须保证所有投票节点的集群配置都是相同的
 func BootstrapCluster(conf *Config, logs LogStore, stable StableStore,
 	snaps SnapshotStore, trans Transport, configuration Configuration) error {
 	// Validate the Raft server config.
@@ -203,8 +236,9 @@ func BootstrapCluster(conf *Config, logs LogStore, stable StableStore,
 		entry.Data = encodePeers(configuration, trans)
 	} else {
 		entry.Type = LogConfiguration
-		entry.Data = encodeConfiguration(configuration)
+		entry.Data = encodeConfiguration(configuration) // 集群配置序列化后保存到entry.Data
 	}
+	// 作为一条log存在LogStore
 	if err := logs.StoreLog(entry); err != nil {
 		return fmt.Errorf("failed to append configuration entry to log: %v", err)
 	}
@@ -220,6 +254,8 @@ func BootstrapCluster(conf *Config, logs LogStore, stable StableStore,
 // safe way to force a given configuration without actually altering the log to
 // insert any new entries, which could cause conflicts with other servers with
 // different state.
+// RecoverCluster用于手动强制更新配置，以便从无法恢复当前配置的法定人数的丢失中恢复，
+// 例如当多个服务器同时死亡时。
 //
 // WARNING! This operation implicitly commits all entries in the Raft log, so
 // in general this is an extremely unsafe operation. If you've lost your other
@@ -478,12 +514,14 @@ func NewRaft(conf *Config, fsm FSM, logs LogStore, stable StableStore, snaps Sna
 	r.setLastLog(lastLog.Index, lastLog.Term)
 
 	// Attempt to restore a snapshot if there are any.
+	// 如果有尝试恢复镜像
 	if err := r.restoreSnapshot(); err != nil {
 		return nil, err
 	}
 
 	// Scan through the log for any configuration change entries.
-	snapshotIndex, _ := r.getLastSnapshot()
+	// 扫描日志获取配置变更日志
+	snapshotIndex, _ := r.getLastSnapshot() // 因为镜像已经恢复，所以从镜像之后的日志开始扫描
 	for index := snapshotIndex + 1; index <= lastLog.Index; index++ {
 		var entry Log
 		if err := r.logs.GetLog(index, &entry); err != nil {

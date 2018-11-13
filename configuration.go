@@ -123,13 +123,17 @@ type configurationChangeRequest struct {
 type configurations struct {
 	// committed is the latest configuration in the log/snapshot that has been
 	// committed (the one with the largest index).
+	// 已提交的最新的配置
 	committed Configuration
 	// committedIndex is the log index where 'committed' was written.
+	// 已提交的最新的配置索引
 	committedIndex uint64
 	// latest is the latest configuration in the log/snapshot (may be committed
 	// or uncommitted)
+	// 最新的日志（可能已提交、也可能未提交）
 	latest Configuration
 	// latestIndex is the log index where 'latest' was written.
+	// 最新的日志索引
 	latestIndex uint64
 }
 
@@ -277,6 +281,7 @@ func nextConfiguration(current Configuration, currentIndex uint64, change config
 // encodePeers is used to serialize a Configuration into the old peers format.
 // This is here for backwards compatibility when operating with a mix of old
 // servers and should be removed once we deprecate support for protocol version 1.
+// 用于序列化集群配置为一个旧peer格式。为了兼容
 func encodePeers(configuration Configuration, trans Transport) []byte {
 	// Gather up all the voters, other suffrage types are not supported by
 	// this data format.
