@@ -9,6 +9,7 @@ import (
 )
 
 // SnapshotMeta is for metadata of a snapshot.
+// 快照元数据
 type SnapshotMeta struct {
 	// Version is the version number of the snapshot metadata. This does not cover
 	// the application's data in the snapshot, that should be versioned
@@ -48,15 +49,18 @@ type SnapshotStore interface {
 
 	// List is used to list the available snapshots in the store.
 	// It should return then in descending order, with the highest index first.
+	// 列出可用的快照，降序排列
 	List() ([]*SnapshotMeta, error)
 
 	// Open takes a snapshot ID and provides a ReadCloser. Once close is
 	// called it is assumed the snapshot is no longer needed.
+	// 传入快照ID，传出ReadCloser
 	Open(id string) (*SnapshotMeta, io.ReadCloser, error)
 }
 
 // SnapshotSink is returned by StartSnapshot. The FSM will Write state
 // to the sink and call Close on completion. On error, Cancel will be invoked.
+
 type SnapshotSink interface {
 	io.WriteCloser
 	ID() string
@@ -66,32 +70,34 @@ type SnapshotSink interface {
 // runSnapshots is a long running goroutine used to manage taking
 // new snapshots of the FSM. It runs in parallel to the FSM and
 // main goroutines, so that snapshots do not block normal operation.
-// runSnapshots是一个长时间运行的协程，用于管理FSM的新快照。它与FSM和主GROUTIN并行运行，这样快照不会阻止正常操作。
+// runSnapshots是一个长时间运行的协程，用于管理FSM的新快照。它与FSM和主协程并行运行，这样快照不会阻止正常操作。
 func (r *Raft) runSnapshots() {
 	for {
 		select {
-		case <-randomTimeout(r.conf.SnapshotInterval):
-			// Check if we should snapshot
+		case <-randomTimeout(r.conf.SnapshotInterval): // 快照时间到
+			// Check if we should snapshot 检查是否需要进行快照
 			if !r.shouldSnapshot() {
 				continue
 			}
 
 			// Trigger a snapshot
+			// 进行快照
 			if _, err := r.takeSnapshot(); err != nil {
 				r.logger.Printf("[ERR] raft: Failed to take snapshot: %v", err)
 			}
 
-		case future := <-r.userSnapshotCh:
+		case future := <-r.userSnapshotCh: // 用户触发
 			// User-triggered, run immediately
 			id, err := r.takeSnapshot()
 			if err != nil {
 				r.logger.Printf("[ERR] raft: Failed to take snapshot: %v", err)
 			} else {
+				//
 				future.opener = func() (*SnapshotMeta, io.ReadCloser, error) {
 					return r.snapshots.Open(id)
 				}
 			}
-			future.respond(err)
+			future.respond(err) // 返回快照执行结果
 
 		case <-r.shutdownCh:
 			return

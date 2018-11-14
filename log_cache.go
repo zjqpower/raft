@@ -10,6 +10,7 @@ import (
 // the recently written entries. For implementations that do not
 // cache themselves, this can provide a substantial boost by
 // avoiding disk I/O on recent entries.
+// 对logstore实现的封装，提供了内存级ring buffer。用于缓存最近写入的条目。
 type LogCache struct {
 	store LogStore
 
@@ -43,6 +44,7 @@ func (c *LogCache) GetLog(idx uint64, log *Log) error {
 	}
 
 	// Forward request on cache miss
+	// 如果缓存里没有
 	return c.store.GetLog(idx, log)
 }
 
@@ -72,7 +74,7 @@ func (c *LogCache) LastIndex() (uint64, error) {
 func (c *LogCache) DeleteRange(min, max uint64) error {
 	// Invalidate the cache on deletes
 	c.l.Lock()
-	c.cache = make([]*Log, len(c.cache))
+	c.cache = make([]*Log, len(c.cache)) // 清空缓存
 	c.l.Unlock()
 
 	return c.store.DeleteRange(min, max)

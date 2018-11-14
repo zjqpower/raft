@@ -15,6 +15,9 @@ type Future interface {
 	// calls will return the same value.
 	// Note that it is not OK to call this method
 	// twice concurrently on the same Future instance.
+	// Error会阻塞直到future到来，返回future的错误状态。
+	// 可以被调用任意次数，所有调用均返回相同的值。
+	// 注意：同一个future实例不能并发的调用这个方法
 	Error() error
 }
 
@@ -40,6 +43,7 @@ type ApplyFuture interface {
 
 // ConfigurationFuture is used for GetConfiguration and can return the
 // latest configuration in use by Raft.
+// 用于获取集群配置，返回当前使用的最新配置
 type ConfigurationFuture interface {
 	IndexFuture
 
@@ -49,6 +53,7 @@ type ConfigurationFuture interface {
 }
 
 // SnapshotFuture is used for waiting on a user-triggered snapshot to complete.
+// 等待用户触发的快照事件
 type SnapshotFuture interface {
 	Future
 
@@ -77,6 +82,7 @@ func (e errorFuture) Index() uint64 {
 
 // deferError can be embedded to allow a future
 // to provide an error in the future.
+// deferError可能嵌入到其他结构体中，以便接收未来发生的错误
 type deferError struct {
 	err       error
 	errCh     chan error
@@ -116,6 +122,7 @@ func (d *deferError) respond(err error) {
 // There are several types of requests that cause a configuration entry to
 // be appended to the log. These are encoded here for leaderLoop() to process.
 // This is internal to a single server.
+// 配置变更
 type configurationChangeFuture struct {
 	logFuture
 	req configurationChangeRequest
@@ -123,6 +130,7 @@ type configurationChangeFuture struct {
 
 // bootstrapFuture is used to attempt a live bootstrap of the cluster. See the
 // Raft object's BootstrapCluster member function for more details.
+//
 type bootstrapFuture struct {
 	deferError
 
@@ -181,6 +189,7 @@ func (u *userSnapshotFuture) Open() (*SnapshotMeta, io.ReadCloser, error) {
 	} else {
 		// Invalidate the opener so it can't get called multiple times,
 		// which isn't generally safe.
+		// 将opener设置为无效以防止多次调用
 		defer func() {
 			u.opener = nil
 		}()
@@ -201,7 +210,7 @@ type userRestoreFuture struct {
 }
 
 // reqSnapshotFuture is used for requesting a snapshot start.
-// It is only used internally.
+// It is only used internally. 仅在内部使用
 type reqSnapshotFuture struct {
 	deferError
 
@@ -220,6 +229,7 @@ type restoreFuture struct {
 
 // verifyFuture is used to verify the current node is still
 // the leader. This is to prevent a stale read.
+// 检查当前节点是否还是leader。防止脏读
 type verifyFuture struct {
 	deferError
 	notifyCh   chan *verifyFuture
@@ -230,6 +240,7 @@ type verifyFuture struct {
 
 // configurationsFuture is used to retrieve the current configurations. This is
 // used to allow safe access to this information outside of the main thread.
+// configurationsFuture用于恢复当前配置。允许在主线程之外安全访问这些信息
 type configurationsFuture struct {
 	deferError
 	configurations configurations
@@ -252,12 +263,14 @@ func (v *verifyFuture) vote(leader bool) {
 	defer v.voteLock.Unlock()
 
 	// Guard against having notified already
+	// 防止重复通知
 	if v.notifyCh == nil {
 		return
 	}
 
 	if leader {
 		v.votes++
+		// 如果超过法定人数
 		if v.votes >= v.quorumSize {
 			v.notifyCh <- v
 			v.notifyCh = nil

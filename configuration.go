@@ -17,6 +17,8 @@ const (
 	// staging server receives enough log entries to be sufficiently caught up to
 	// the leader's log, the leader will invoke a  membership change to change
 	// the Staging server to a Voter.
+	// Staging的行为类似nonvoter，但例外的是：一旦staging server收到了足够多的日志条目，
+	// 足够接近leader的日志，这时leader将变更成员关系将staging server调整为Voter
 	Staging
 )
 
@@ -68,15 +70,21 @@ type ConfigurationChangeCommand uint8
 
 const (
 	// AddStaging makes a server Staging unless its Voter.
+	// 将服务器设置为Staging（暂存（中间）状态）除非他是Voter
+	// 本期没有Staging状态，在AddStaging命令执行时会直接将服务器设置为Voter状态
 	AddStaging ConfigurationChangeCommand = iota
 	// AddNonvoter makes a server Nonvoter unless its Staging or Voter.
+	// 将服务器设置为Nonvoter，触发他是Staging或Voter
 	AddNonvoter
 	// DemoteVoter makes a server Nonvoter unless its absent.
+	// 将服务器降级为Nonvoter状态，触发他已被移除
 	DemoteVoter
 	// RemoveServer removes a server entirely from the cluster membership.
+	// 将服务器从集群成员中移除
 	RemoveServer
 	// Promote is created automatically by a leader; it turns a Staging server
 	// into a Voter.
+	// 由leader自动触发，将Staging Server提升为Voter
 	Promote
 )
 
@@ -106,6 +114,7 @@ type configurationChangeRequest struct {
 	// prevIndex, if nonzero, is the index of the only configuration upon which
 	// this change may be applied; if another configuration entry has been
 	// added in the meantime, this request will fail.
+	// 此配置变更之前的一个配置的索引号（即当前正在使用的配置的索引号）
 	prevIndex uint64
 }
 
@@ -113,6 +122,7 @@ type configurationChangeRequest struct {
 // Note that, per Diego's dissertation, there can be at most one uncommitted
 // configuration at a time (the next configuration may not be created until the
 // prior one has been committed).
+// 同一时刻最多只能有一个未提交的配置
 //
 // One downside to storing just two configurations is that if you try to take a
 // snapshot when your state machine hasn't yet applied the committedIndex, we
@@ -137,7 +147,7 @@ type configurations struct {
 	latestIndex uint64
 }
 
-// Clone makes a deep copy of a configurations object.
+// Clone makes a deep copy of a configurations object.   原型模式 - 深拷贝
 func (c *configurations) Clone() (copy configurations) {
 	copy.committed = c.committed.Clone()
 	copy.committedIndex = c.committedIndex
@@ -148,6 +158,7 @@ func (c *configurations) Clone() (copy configurations) {
 
 // hasVote returns true if the server identified by 'id' is a Voter in the
 // provided Configuration.
+// 判断有没有投票权，有返回true
 func hasVote(configuration Configuration, id ServerID) bool {
 	for _, server := range configuration.Servers {
 		if server.ID == id {
@@ -159,6 +170,11 @@ func hasVote(configuration Configuration, id ServerID) bool {
 
 // checkConfiguration tests a cluster membership configuration for common
 // errors.
+/* 检查集群配置的正确性
+1）ServerID不能为空，且不能有重复的ServerID
+2）ServerAddress不能为空，且不能有重复的ServerAddress
+3）必须有Voter节点
+*/
 func checkConfiguration(configuration Configuration) error {
 	idSet := make(map[ServerID]bool)
 	addressSet := make(map[ServerAddress]bool)
@@ -191,7 +207,9 @@ func checkConfiguration(configuration Configuration) error {
 // nextConfiguration generates a new Configuration from the current one and a
 // configuration change request. It's split from appendConfigurationEntry so
 // that it can be unit tested easily.
+// 从当前配置和配置变更请求中产生一个新的集群配置
 func nextConfiguration(current Configuration, currentIndex uint64, change configurationChangeRequest) (Configuration, error) {
+
 	if change.prevIndex > 0 && change.prevIndex != currentIndex {
 		return Configuration{}, fmt.Errorf("Configuration changed since %v (latest is %v)", change.prevIndex, currentIndex)
 	}
@@ -271,6 +289,7 @@ func nextConfiguration(current Configuration, currentIndex uint64, change config
 	}
 
 	// Make sure we didn't do something bad like remove the last voter
+	// 检查确认没有做坏事，比如移出了最后一个Voter
 	if err := checkConfiguration(configuration); err != nil {
 		return Configuration{}, err
 	}

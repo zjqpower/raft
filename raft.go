@@ -132,6 +132,7 @@ func (r *Raft) run() {
 		}
 
 		// Enter into a sub-FSM
+		// 根据不同的状态执行不同的逻辑
 		switch r.getState() {
 		case Follower:
 			r.runFollower()
@@ -203,6 +204,7 @@ func (r *Raft) runFollower() {
 					didWarn = true
 				}
 			} else {
+				// 设置自己为候选状人，进入选举流程
 				r.logger.Printf(`[WARN] raft: Heartbeat timeout from %q reached, starting election`, lastLeader)
 				metrics.IncrCounter([]string{"raft", "transition", "heartbeat_timeout"}, 1)
 				r.setState(Candidate)
@@ -963,7 +965,7 @@ func (r *Raft) processRPC(rpc RPC) {
 	switch cmd := rpc.Command.(type) {
 	case *AppendEntriesRequest: // 追加日志
 		r.appendEntries(rpc, cmd)
-	case *RequestVoteRequest:   // 选举
+	case *RequestVoteRequest: // 选举
 		r.requestVote(rpc, cmd)
 	case *InstallSnapshotRequest: // 镜像
 		r.installSnapshot(rpc, cmd)

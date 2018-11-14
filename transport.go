@@ -114,6 +114,7 @@ type AppendPipeline interface {
 }
 
 // AppendFuture is used to return information about a pipelined AppendEntries request.
+// 用于返回关于管道化的AppendEntries请求信息
 type AppendFuture interface {
 	Future
 

@@ -28,9 +28,10 @@ const (
 
 // FileSnapshotStore implements the SnapshotStore interface and allows
 // snapshots to be made on the local disk.
+// FileSnapshotStore实现了SnapshotStore接口，将快照保存在本地磁盘
 type FileSnapshotStore struct {
-	path   string
-	retain int
+	path   string //  快照保存路径
+	retain int    // 控制本地保存的快照数量
 	logger *log.Logger
 }
 
@@ -55,7 +56,7 @@ type FileSnapshotSink struct {
 // on disk so that we can verify the snapshot.
 type fileSnapshotMeta struct {
 	SnapshotMeta
-	CRC []byte
+	CRC []byte // crc校验，保证数据完整性
 }
 
 // bufferedFile is returned when we open a snapshot. This way
@@ -76,6 +77,7 @@ func (b *bufferedFile) Close() error {
 // NewFileSnapshotStoreWithLogger creates a new FileSnapshotStore based
 // on a base directory. The `retain` parameter controls how many
 // snapshots are retained. Must be at least 1.
+// 基于base目录创建文件快照存储
 func NewFileSnapshotStoreWithLogger(base string, retain int, logger *log.Logger) (*FileSnapshotStore, error) {
 	if retain < 1 {
 		return nil, fmt.Errorf("must retain at least one snapshot")
@@ -97,7 +99,7 @@ func NewFileSnapshotStoreWithLogger(base string, retain int, logger *log.Logger)
 		logger: logger,
 	}
 
-	// Do a permissions test
+	// Do a permissions test 操作权限测试
 	if err := store.testPermissions(); err != nil {
 		return nil, fmt.Errorf("permissions test failed: %v", err)
 	}
@@ -133,6 +135,7 @@ func (f *FileSnapshotStore) testPermissions() error {
 }
 
 // snapshotName generates a name for the snapshot.
+// 产生快照名称
 func snapshotName(term, index uint64) string {
 	now := time.Now()
 	msec := now.UnixNano() / int64(time.Millisecond)
@@ -147,12 +150,12 @@ func (f *FileSnapshotStore) Create(version SnapshotVersion, index, term uint64,
 		return nil, fmt.Errorf("unsupported snapshot version %d", version)
 	}
 
-	// Create a new path
+	// Create a new path 产生快照路径
 	name := snapshotName(term, index)
 	path := filepath.Join(f.path, name+tmpSuffix)
 	f.logger.Printf("[INFO] snapshot: Creating new snapshot at %s", path)
 
-	// Make the directory
+	// Make the directory 新建快照文件夹
 	if err := os.MkdirAll(path, 0755); err != nil {
 		f.logger.Printf("[ERR] snapshot: Failed to make snapshot directory: %v", err)
 		return nil, err
@@ -178,7 +181,7 @@ func (f *FileSnapshotStore) Create(version SnapshotVersion, index, term uint64,
 		},
 	}
 
-	// Write out the meta data
+	// Write out the meta data  写元数据
 	if err := sink.writeMeta(); err != nil {
 		f.logger.Printf("[ERR] snapshot: Failed to write metadata: %v", err)
 		return nil, err
@@ -346,7 +349,9 @@ func (f *FileSnapshotStore) Open(id string) (*SnapshotMeta, io.ReadCloser, error
 }
 
 // ReapSnapshots reaps any snapshots beyond the retain count.
+// 移除超出数量的快照
 func (f *FileSnapshotStore) ReapSnapshots() error {
+	// getSnapshots返回的结果已经排好序  new->old
 	snapshots, err := f.getSnapshots()
 	if err != nil {
 		f.logger.Printf("[ERR] snapshot: Failed to get snapshots: %v", err)
@@ -501,6 +506,7 @@ func (s *FileSnapshotSink) writeMeta() error {
 		return err
 	}
 
+	// 写入硬盘
 	if err = fh.Sync(); err != nil {
 		return err
 	}

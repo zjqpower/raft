@@ -45,7 +45,7 @@ var (
 
 	// ErrNothingNewToSnapshot is returned when trying to create a snapshot
 	// but there's nothing new commited to the FSM（有限状态自动机） since we started.
-	// 当尝试创建镜像时发现在启动后并没有新的提交到FSM，返回ErrNothingNewToSnapshot错误
+	// 当尝试创建镜像时发现在启动后并没有新的条目提交到FSM，返回ErrNothingNewToSnapshot错误
 	ErrNothingNewToSnapshot = errors.New("nothing new to snapshot")
 
 	// ErrUnsupportedProtocol is returned when an operation is attempted
@@ -549,6 +549,7 @@ func NewRaft(conf *Config, fsm FSM, logs LogStore, stable StableStore, snaps Sna
 // restoreSnapshot attempts to restore the latest snapshots, and fails if none
 // of them can be restored. This is called at initialization time, and is
 // completely unsafe to call at any other time.
+// 尝试从最新快照恢复状态。只在初始化时调用。
 func (r *Raft) restoreSnapshot() error {
 	snapshots, err := r.snapshots.List()
 	if err != nil {
@@ -579,8 +580,9 @@ func (r *Raft) restoreSnapshot() error {
 		// Update the last stable snapshot info
 		r.setLastSnapshot(snapshot.Index, snapshot.Term)
 
-		// Update the configuration
+		// Update the configuration  为了新旧版本兼容
 		if snapshot.Version > 0 {
+			// 新版本
 			r.configurations.committed = snapshot.Configuration
 			r.configurations.committedIndex = snapshot.ConfigurationIndex
 			r.configurations.latest = snapshot.Configuration
@@ -610,6 +612,7 @@ func (r *Raft) restoreSnapshot() error {
 // absolutely must make sure that you call it with the same configuration on all
 // the Voter servers. There is no need to bootstrap Nonvoter and Staging
 // servers.
+//
 func (r *Raft) BootstrapCluster(configuration Configuration) Future {
 	bootstrapReq := &bootstrapFuture{}
 	bootstrapReq.init()
@@ -625,6 +628,7 @@ func (r *Raft) BootstrapCluster(configuration Configuration) Future {
 // Leader is used to return the current leader of the cluster.
 // It may return empty string if there is no current leader
 // or the leader is unknown.
+// 返回集群的leader，可能为空
 func (r *Raft) Leader() ServerAddress {
 	r.leaderLock.RLock()
 	leader := r.leader
@@ -637,6 +641,8 @@ func (r *Raft) Leader() ServerAddress {
 // An optional timeout can be provided to limit the amount of time we wait
 // for the command to be started. This must be run on the leader or it
 // will fail.
+// 接收命令并返回一个future，调用者可以拿来等待处理结果。
+// 该方法只能在leader节点上调用
 func (r *Raft) Apply(cmd []byte, timeout time.Duration) ApplyFuture {
 	metrics.IncrCounter([]string{"raft", "apply"}, 1)
 	var timer <-chan time.Time

@@ -5,6 +5,7 @@ import (
 )
 
 // Observation is sent along the given channel to observers when an event occurs.
+// 当事件发生时，观察结果通过给定的通道被发送给观察者
 type Observation struct {
 	// Raft holds the Raft instance generating the observation.
 	Raft *Raft
@@ -44,6 +45,7 @@ type Observer struct {
 
 	// filter will be called to determine if an observation should be sent to
 	// the channel.
+	// 调用filter方法来决定观察结果是否需要发送给这个通道
 	filter FilterFn
 
 	// id is the ID of this observer in the Raft map.

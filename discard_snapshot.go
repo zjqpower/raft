@@ -10,6 +10,7 @@ import (
 // log should be truncated but no snapshot should be retained.
 // This should never be used for production use, and is only
 // suitable for testing.
+// 仅用于测试
 type DiscardSnapshotStore struct{}
 
 type DiscardSnapshotSink struct{}

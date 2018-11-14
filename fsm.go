@@ -10,11 +10,13 @@ import (
 
 // FSM provides an interface that can be implemented by
 // clients to make use of the replicated log.
+// 客户端程序实现FSM接口，以使用副本日志
 type FSM interface {
 	// Apply log is invoked once a log entry is committed.
 	// It returns a value which will be made available in the
 	// ApplyFuture returned by Raft.Apply method if that
 	// method was called on the same Raft node as the FSM.
+	// 当raft内部commit了一个log entry后，调用Apply接口。
 	Apply(*Log) interface{}
 
 	// Snapshot is used to support log compaction. This call should
@@ -23,11 +25,15 @@ type FSM interface {
 	// threads, but Apply will be called concurrently with Persist. This means
 	// the FSM should be implemented in a fashion that allows for concurrent
 	// updates while a snapshot is happening.
+	// 生成一个快照。
+	// 用于支持日志压缩。返回一个保存某一时间点的FSM数据的快照。
+	// FSM应该被实现成支持并发更新
 	Snapshot() (FSMSnapshot, error)
 
 	// Restore is used to restore an FSM from a snapshot. It is not called
 	// concurrently with any other command. The FSM must discard all previous
 	// state.
+	// 从快照里恢复FSM
 	Restore(io.ReadCloser) error
 }
 
@@ -37,16 +43,17 @@ type FSM interface {
 type FSMSnapshot interface {
 	// Persist should dump all necessary state to the WriteCloser 'sink',
 	// and call sink.Close() when finished or call sink.Cancel() on error.
+	// 将所有必须的状态转储到sink中。成功后调用sink.Close()，失败则调用sink.Cancel()
 	Persist(sink SnapshotSink) error
 
 	// Release is invoked when we are finished with the snapshot.
+	// 完成快照后调用release方法
 	Release()
 }
 
 // runFSM is a long running goroutine responsible for applying logs
 // to the FSM. This is done async of other logs since we don't want
 // the FSM to block our internal operations.
-// 
 func (r *Raft) runFSM() {
 	var lastIndex, lastTerm uint64
 

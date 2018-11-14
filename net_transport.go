@@ -57,6 +57,7 @@ is not known if there is an error.
 
 */
 type NetworkTransport struct {
+	// 连接池，每个地址对应一个连接池
 	connPool     map[ServerAddress][]*netConn
 	connPoolLock sync.Mutex
 
@@ -67,8 +68,10 @@ type NetworkTransport struct {
 
 	logger *log.Logger
 
+	// 连接池的大小，需要注明的是connPool中地址对应的*netConn的大小
 	maxPool int
 
+	// 根据ServerID获取地址
 	serverAddressProvider ServerAddressProvider
 
 	shutdown     bool
@@ -78,6 +81,7 @@ type NetworkTransport struct {
 	stream StreamLayer
 
 	// streamCtx is used to cancel existing connection handlers.
+	// 用于cancel已存在连接
 	streamCtx     context.Context
 	streamCancel  context.CancelFunc
 	streamCtxLock sync.RWMutex
@@ -110,6 +114,7 @@ type ServerAddressProvider interface {
 
 // StreamLayer is used with the NetworkTransport to provide
 // the low level stream abstraction.
+// 为NetworkTransport提供底层数据流抽象，对应的实现为TCPStreamLayer
 type StreamLayer interface {
 	net.Listener
 
@@ -143,6 +148,7 @@ type netPipeline struct {
 }
 
 // NewNetworkTransportWithConfig creates a new network transport with the given config struct
+// 根据给的配置创建NetworkTransport对象
 func NewNetworkTransportWithConfig(
 	config *NetworkTransportConfig,
 ) *NetworkTransport {
@@ -202,6 +208,7 @@ func NewNetworkTransportWithLogger(
 
 // setupStreamContext is used to create a new stream context. This should be
 // called with the stream lock held.
+// 创建流的上下文，被stream lock保护
 func (n *NetworkTransport) setupStreamContext() {
 	ctx, cancel := context.WithCancel(context.Background())
 	n.streamCtx = ctx
@@ -225,12 +232,14 @@ func (n *NetworkTransport) SetHeartbeatHandler(cb func(rpc RPC)) {
 }
 
 // CloseStreams closes the current streams.
+// 关闭当前流
 func (n *NetworkTransport) CloseStreams() {
 	n.connPoolLock.Lock()
 	defer n.connPoolLock.Unlock()
 
 	// Close all the connections in the connection pool and then remove their
 	// entry.
+	// 遍历关闭并移出所有的连接
 	for k, e := range n.connPool {
 		for _, conn := range e {
 			conn.Release()
@@ -283,6 +292,7 @@ func (n *NetworkTransport) IsShutdown() bool {
 }
 
 // getExistingConn is used to grab a pooled connection.
+// 获取指定目标的连接，
 func (n *NetworkTransport) getPooledConn(target ServerAddress) *netConn {
 	n.connPoolLock.Lock()
 	defer n.connPoolLock.Unlock()
@@ -292,6 +302,7 @@ func (n *NetworkTransport) getPooledConn(target ServerAddress) *netConn {
 		return nil
 	}
 
+	// 取末尾的连接
 	var conn *netConn
 	num := len(conns)
 	conn, conns[num-1] = conns[num-1], nil
@@ -305,6 +316,7 @@ func (n *NetworkTransport) getConnFromAddressProvider(id ServerID, target Server
 	return n.getConn(address)
 }
 
+// 获取指定ServerID的地址，若获取失败返回target
 func (n *NetworkTransport) getProviderAddressOrFallback(id ServerID, target ServerAddress) ServerAddress {
 	if n.serverAddressProvider != nil {
 		serverAddressOverride, err := n.serverAddressProvider.ServerAddr(id)
@@ -318,6 +330,7 @@ func (n *NetworkTransport) getProviderAddressOrFallback(id ServerID, target Serv
 }
 
 // getConn is used to get a connection from the pool.
+// 从连接池里获取一个连接，获取失败则新建一个连接
 func (n *NetworkTransport) getConn(target ServerAddress) (*netConn, error) {
 	// Check for a pooled conn
 	if conn := n.getPooledConn(target); conn != nil {
@@ -347,6 +360,7 @@ func (n *NetworkTransport) getConn(target ServerAddress) (*netConn, error) {
 }
 
 // returnConn returns a connection back to the pool.
+// 将连接返回连接池
 func (n *NetworkTransport) returnConn(conn *netConn) {
 	n.connPoolLock.Lock()
 	defer n.connPoolLock.Unlock()
@@ -385,6 +399,7 @@ func (n *NetworkTransport) RequestVote(id ServerID, target ServerAddress, args *
 }
 
 // genericRPC handles a simple request/response RPC.
+// 一次请求-应答
 func (n *NetworkTransport) genericRPC(id ServerID, target ServerAddress, rpcType uint8, args interface{}, resp interface{}) error {
 	// Get a conn
 	conn, err := n.getConnFromAddressProvider(id, target)
@@ -510,6 +525,7 @@ func (n *NetworkTransport) handleConn(connCtx context.Context, conn net.Conn) {
 }
 
 // handleCommand is used to decode and dispatch a single command.
+// 解析并分发命令
 func (n *NetworkTransport) handleCommand(r *bufio.Reader, dec *codec.Decoder, enc *codec.Encoder) error {
 	// Get the rpc type
 	rpcType, err := r.ReadByte()
@@ -602,6 +618,7 @@ RESP:
 
 // decodeResponse is used to decode an RPC response and reports whether
 // the connection can be reused.
+// 用于解码应答消息，并报告连接是否能重用
 func decodeResponse(conn *netConn, resp interface{}) (bool, error) {
 	// Decode the error if any
 	var rpcError string
@@ -647,6 +664,7 @@ func sendRPC(conn *netConn, rpcType uint8, args interface{}) error {
 
 // newNetPipeline is used to construct a netPipeline from a given
 // transport and connection.
+// 从一个给定的transport和conn构造一个网络通道
 func newNetPipeline(trans *NetworkTransport, conn *netConn) *netPipeline {
 	n := &netPipeline{
 		conn:         conn,
@@ -684,6 +702,7 @@ func (n *netPipeline) decodeResponses() {
 }
 
 // AppendEntries is used to pipeline a new append entries request.
+// 管道化发送AppendEntries请求
 func (n *netPipeline) AppendEntries(args *AppendEntriesRequest, resp *AppendEntriesResponse) (AppendFuture, error) {
 	// Create a new future
 	future := &appendFuture{
@@ -693,12 +712,12 @@ func (n *netPipeline) AppendEntries(args *AppendEntriesRequest, resp *AppendEntr
 	}
 	future.init()
 
-	// Add a send timeout
+	// Add a send timeout 设置发送超时时间
 	if timeout := n.trans.timeout; timeout > 0 {
 		n.conn.conn.SetWriteDeadline(time.Now().Add(timeout))
 	}
 
-	// Send the RPC
+	// Send the RPC 发送请求
 	if err := sendRPC(n.conn, rpcAppendEntries, future.args); err != nil {
 		return nil, err
 	}
