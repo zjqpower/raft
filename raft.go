@@ -32,6 +32,7 @@ func (r *Raft) getRPCHeader() RPCHeader {
 
 // checkRPCHeader houses logic about whether this instance of Raft can process
 // the given RPC message.
+// 校验rpc包头
 func (r *Raft) checkRPCHeader(rpc RPC) error {
 	// Get the header off the RPC message.
 	wh, ok := rpc.Command.(WithRPCHeader)
@@ -77,6 +78,7 @@ type commitTuple struct {
 }
 
 // leaderState is state that is used while we are a leader.
+// leader状态
 type leaderState struct {
 	commitCh   chan struct{}
 	commitment *commitment
@@ -87,6 +89,7 @@ type leaderState struct {
 }
 
 // setLeader is used to modify the current leader of the cluster
+// 设置集群leader
 func (r *Raft) setLeader(leader ServerAddress) {
 	r.leaderLock.Lock()
 	oldLeader := r.leader
@@ -179,16 +182,19 @@ func (r *Raft) runFollower() {
 			b.respond(r.liveBootstrap(b.configuration))
 
 		case <-heartbeatTimer:
+			// 到了心跳超时时间，先重置定时器
 			// Restart the heartbeat timer
 			heartbeatTimer = randomTimeout(r.conf.HeartbeatTimeout)
 
 			// Check if we have had a successful contact
+			// 检查是否心跳超时
 			lastContact := r.LastContact()
 			if time.Now().Sub(lastContact) < r.conf.HeartbeatTimeout {
 				continue
 			}
 
 			// Heartbeat failed! Transition to the candidate state
+			// 如果心跳超时，将leader置空，转入选举状态
 			lastLeader := r.Leader()
 			r.setLeader("")
 
@@ -220,6 +226,7 @@ func (r *Raft) runFollower() {
 // liveBootstrap attempts to seed an initial configuration for the cluster. See
 // the Raft object's member BootstrapCluster for more details. This must only be
 // called on the main thread, and only makes sense in the follower state.
+// 尝试为集群产生一个初始配置。这必须只在主线程调用，仅在follower状态有意义
 func (r *Raft) liveBootstrap(configuration Configuration) error {
 	// Use the pre-init API to make the static updates.
 	err := BootstrapCluster(&r.conf, r.logs, r.stable, r.snapshots,
@@ -240,18 +247,19 @@ func (r *Raft) liveBootstrap(configuration Configuration) error {
 }
 
 // runCandidate runs the FSM for a candidate.
+// 执行选举
 func (r *Raft) runCandidate() {
 	r.logger.Printf("[INFO] raft: %v entering Candidate state in term %v",
 		r, r.getCurrentTerm()+1)
 	metrics.IncrCounter([]string{"raft", "state", "candidate"}, 1)
 
 	// Start vote for us, and set a timeout
-	voteCh := r.electSelf()
-	electionTimer := randomTimeout(r.conf.ElectionTimeout)
+	voteCh := r.electSelf()                                // 先选自己
+	electionTimer := randomTimeout(r.conf.ElectionTimeout) // 设置选举超时时间
 
-	// Tally the votes, need a simple majority
+	// Tally the votes, need a simple majority 计算票数，需要大多数票
 	grantedVotes := 0
-	votesNeeded := r.quorumSize()
+	votesNeeded := r.quorumSize() // 获取法定票数，即需要的投票数
 	r.logger.Printf("[DEBUG] raft: Votes needed: %d", votesNeeded)
 
 	for r.getState() == Candidate {
@@ -261,6 +269,7 @@ func (r *Raft) runCandidate() {
 
 		case vote := <-voteCh:
 			// Check if the term is greater than ours, bail
+			// 别人的任期比自己的大，将自己设置为follower，结束选举
 			if vote.Term > r.getCurrentTerm() {
 				r.logger.Printf("[DEBUG] raft: Newer term discovered, fallback to follower")
 				r.setState(Follower)
@@ -270,12 +279,13 @@ func (r *Raft) runCandidate() {
 
 			// Check if the vote is granted
 			if vote.Granted {
-				grantedVotes++
+				grantedVotes++ // 收到投票，计数+1
 				r.logger.Printf("[DEBUG] raft: Vote granted from %s in term %v. Tally: %d",
 					vote.voterID, vote.Term, grantedVotes)
 			}
 
 			// Check if we've become the leader
+			// 检查票数是否足够
 			if grantedVotes >= votesNeeded {
 				r.logger.Printf("[INFO] raft: Election won. Tally: %d", grantedVotes)
 				r.setState(Leader)
@@ -300,6 +310,7 @@ func (r *Raft) runCandidate() {
 			r.respond(ErrNotLeader)
 
 		case c := <-r.configurationsCh:
+			// 返回当前配置
 			c.configurations = r.configurations.Clone()
 			c.respond(nil)
 
@@ -309,6 +320,7 @@ func (r *Raft) runCandidate() {
 		case <-electionTimer:
 			// Election failed! Restart the election. We simply return,
 			// which will kick us back into runCandidate
+			// 选举超时，重新选举
 			r.logger.Printf("[WARN] raft: Election timeout reached, restarting election")
 			return
 
@@ -320,12 +332,13 @@ func (r *Raft) runCandidate() {
 
 // runLeader runs the FSM for a leader. Do the setup here and drop into
 // the leaderLoop for the hot loop.
+// 执行leader逻辑
 func (r *Raft) runLeader() {
 	r.logger.Printf("[INFO] raft: %v entering Leader state", r)
 	metrics.IncrCounter([]string{"raft", "state", "leader"}, 1)
 
 	// Notify that we are the leader
-	asyncNotifyBool(r.leaderCh, true)
+	asyncNotifyBool(r.leaderCh, true) // 通知我们是leader。 通知给raft库的调用者
 
 	// Push to the notify channel if given
 	if notify := r.conf.NotifyCh; notify != nil {
@@ -335,7 +348,7 @@ func (r *Raft) runLeader() {
 		}
 	}
 
-	// Setup leader state
+	// Setup leader state 设置leader状态
 	r.leaderState.commitCh = make(chan struct{}, 1)
 	r.leaderState.commitment = newCommitment(r.leaderState.commitCh,
 		r.configurations.latest,
@@ -346,25 +359,29 @@ func (r *Raft) runLeader() {
 	r.leaderState.stepDown = make(chan struct{}, 1)
 
 	// Cleanup state on step down
+	// 辞任leader时调用此函数清理状态
 	defer func() {
 		// Since we were the leader previously, we update our
 		// last contact time when we step down, so that we are not
 		// reporting a last contact time from before we were the
 		// leader. Otherwise, to a client it would seem our data
 		// is extremely stale.
+		// 设置联系时间，防止辞任后立即进入选举状态
 		r.setLastContact()
 
-		// Stop replication
+		// Stop replication 停止复制
 		for _, p := range r.leaderState.replState {
 			close(p.stopCh)
 		}
 
 		// Respond to all inflight operations
+		// 响应所有未处理的操作失败应答ErrLeadershipLost
 		for e := r.leaderState.inflight.Front(); e != nil; e = e.Next() {
 			e.Value.(*logFuture).respond(ErrLeadershipLost)
 		}
 
 		// Respond to any pending verify requests
+		// 响应所有的leader状态检查请求
 		for future := range r.leaderState.notify {
 			future.respond(ErrLeadershipLost)
 		}
@@ -387,7 +404,7 @@ func (r *Raft) runLeader() {
 		r.leaderLock.Unlock()
 
 		// Notify that we are not the leader
-		asyncNotifyBool(r.leaderCh, false)
+		asyncNotifyBool(r.leaderCh, false) // 通知我们不是leader。 通知给raft库的调用者
 
 		// Push to the notify channel if given
 		if notify := r.conf.NotifyCh; notify != nil {
@@ -420,7 +437,7 @@ func (r *Raft) runLeader() {
 	r.dispatchLogs([]*logFuture{noop})
 
 	// Sit in the leader loop until we step down
-	r.leaderLoop()
+	r.leaderLoop() // leader循环
 }
 
 // startStopReplication will set up state and start asynchronous replication to
@@ -458,6 +475,7 @@ func (r *Raft) startStopReplication() {
 	}
 
 	// Stop replication goroutines that need stopping
+	// 停止已移除服务器的复制协程
 	for serverID, repl := range r.leaderState.replState {
 		if inConfig[serverID] {
 			continue
@@ -659,6 +677,7 @@ func (r *Raft) verifyLeader(v *verifyFuture) {
 // within the last leader lease interval. If not, we need to step down,
 // as we may have lost connectivity. Returns the maximum duration without
 // contact. This must only be called from the main thread.
+// 检查在上一个租期内是否和法定数量的节点通信过。如果没有，需要辞任leader
 func (r *Raft) checkLeaderLease() time.Duration {
 	// Track contacted nodes, we can always contact ourself
 	contacted := 1
@@ -697,6 +716,7 @@ func (r *Raft) checkLeaderLease() time.Duration {
 // quorumSize is used to return the quorum size. This must only be called on
 // the main thread.
 // TODO: revisit usage
+// 获取法定数，即赢得选举的票数
 func (r *Raft) quorumSize() int {
 	voters := 0
 	for _, server := range r.configurations.latest.Servers {
@@ -715,6 +735,7 @@ func (r *Raft) quorumSize() int {
 // so that the snapshot will be sent to followers and used for any new joiners.
 // This can only be run on the leader, and returns a future that can be used to
 // block until complete.
+// 恢复一个外部快照
 func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 	defer metrics.MeasureSince([]string{"raft", "restoreUserSnapshot"}, time.Now())
 
@@ -727,6 +748,7 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 	// We don't support snapshots while there's a config change
 	// outstanding since the snapshot doesn't have a means to
 	// represent this state.
+	// 当有配置变更时不支持恢复快照
 	committedIndex := r.configurations.committedIndex
 	latestIndex := r.configurations.latestIndex
 	if committedIndex != latestIndex {
@@ -749,6 +771,7 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 	// index in the snapshot. It's important that we leave a hole in
 	// the index so we know there's nothing in the Raft log there and
 	// replication will fault and send the snapshot.
+	// 重新计算term和lastindex
 	term := r.getCurrentTerm()
 	lastIndex := r.getLastIndex()
 	if meta.Index > lastIndex {
@@ -758,6 +781,7 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 
 	// Dump the snapshot. Note that we use the latest configuration,
 	// not the one that came with the snapshot.
+	// 新建一个快照
 	sink, err := r.snapshots.Create(version, lastIndex, term,
 		r.configurations.latest, r.configurations.latestIndex, r.trans)
 	if err != nil {
@@ -779,6 +803,7 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 
 	// Restore the snapshot into the FSM. If this fails we are in a
 	// bad state so we panic to take ourselves out.
+	// 恢复快照到FSM中，失败就Panic
 	fsm := &restoreFuture{ID: sink.ID()}
 	fsm.init()
 	select {
@@ -806,6 +831,7 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 // appendConfigurationEntry changes the configuration and adds a new
 // configuration entry to the log. This must only be called from the
 // main thread.
+// 追加一条配置条目到日志中
 func (r *Raft) appendConfigurationEntry(future *configurationChangeFuture) {
 	configuration, err := nextConfiguration(r.configurations.latest, r.configurations.latestIndex, future.req)
 	if err != nil {
@@ -845,6 +871,7 @@ func (r *Raft) appendConfigurationEntry(future *configurationChangeFuture) {
 
 // dispatchLog is called on the leader to push a log to disk, mark it
 // as inflight and begin replication of it.
+// 将log写入磁盘，标记为inflight状态并开始复制
 func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 	now := time.Now()
 	defer metrics.MeasureSince([]string{"raft", "leader", "dispatchLog"}, now)
@@ -864,11 +891,12 @@ func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 
 	// Write the log entry locally
 	if err := r.logs.StoreLogs(logs); err != nil {
+		// 保存日志失败
 		r.logger.Printf("[ERR] raft: Failed to commit logs: %v", err)
 		for _, applyLog := range applyLogs {
-			applyLog.respond(err)
+			applyLog.respond(err) // 返回失败应答
 		}
-		r.setState(Follower)
+		r.setState(Follower) // 将自己设置为follower
 		return
 	}
 	r.leaderState.commitment.match(r.localID, lastIndex)
@@ -956,6 +984,7 @@ func (r *Raft) processLog(l *Log, future *logFuture) {
 
 // processRPC is called to handle an incoming RPC request. This must only be
 // called from the main thread.
+// 处理rpc请求
 func (r *Raft) processRPC(rpc RPC) {
 	if err := r.checkRPCHeader(rpc); err != nil {
 		rpc.Respond(nil, err)
@@ -1182,6 +1211,7 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	}
 
 	// Check if we have an existing leader [who's not the candidate]
+	// 检查我们是否已经有leader了，有就拒绝
 	candidate := r.trans.DecodePeer(req.Candidate)
 	if leader := r.Leader(); leader != "" && leader != candidate {
 		r.logger.Printf("[WARN] raft: Rejecting vote request from %v since we have a leader: %v",
@@ -1189,12 +1219,13 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 		return
 	}
 
-	// Ignore an older term
+	// Ignore an older term 忽略任期号旧的请求
 	if req.Term < r.getCurrentTerm() {
 		return
 	}
 
 	// Increase the term if we see a newer one
+	// 如果请求中的任期比当前的任期新，将自己设置为follower并更新任期
 	if req.Term > r.getCurrentTerm() {
 		// Ensure transition to follower
 		r.setState(Follower)
@@ -1203,6 +1234,7 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	}
 
 	// Check if we have voted yet
+	// 检查是否投票过了，获取上一次投票的任期号和候选者
 	lastVoteTerm, err := r.stable.GetUint64(keyLastVoteTerm)
 	if err != nil && err.Error() != "not found" {
 		r.logger.Printf("[ERR] raft: Failed to get last vote term: %v", err)
@@ -1215,6 +1247,7 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	}
 
 	// Check if we've voted in this election before
+	// 检查这一轮是否投票过了
 	if lastVoteTerm == req.Term && lastVoteCandBytes != nil {
 		r.logger.Printf("[INFO] raft: Duplicate RequestVote for same term: %d", req.Term)
 		if bytes.Compare(lastVoteCandBytes, req.Candidate) == 0 {
@@ -1225,6 +1258,7 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	}
 
 	// Reject if their term is older
+	// 检查请求中候选人的最新日志的任期号和索引号是否比我们还要旧，旧就拒绝掉
 	lastIdx, lastTerm := r.getLastEntry()
 	if lastTerm > req.LastLogTerm {
 		r.logger.Printf("[WARN] raft: Rejecting vote request from %v since our last term is greater (%d, %d)",
@@ -1239,13 +1273,14 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	}
 
 	// Persist a vote for safety
+	// 为安全考虑，存储投票信息
 	if err := r.persistVote(req.Term, req.Candidate); err != nil {
 		r.logger.Printf("[ERR] raft: Failed to persist vote: %v", err)
 		return
 	}
 
-	resp.Granted = true
-	r.setLastContact()
+	resp.Granted = true // 投票
+	r.setLastContact()  // 更新联系时间
 	return
 }
 
@@ -1253,6 +1288,7 @@ func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 // We must be in the follower state for this, since it means we are
 // too far behind a leader for log replay. This must only be called
 // from the main thread.
+// 只有follower才会收到这个请求，意味着和leader的日志相差的太多
 func (r *Raft) installSnapshot(rpc RPC, req *InstallSnapshotRequest) {
 	defer metrics.MeasureSince([]string{"raft", "rpc", "installSnapshot"}, time.Now())
 	// Setup a response
@@ -1395,10 +1431,10 @@ func (r *Raft) electSelf() <-chan *voteResult {
 	// Create a response channel
 	respCh := make(chan *voteResult, len(r.configurations.latest.Servers))
 
-	// Increment the term
+	// Increment the term  任期号+1
 	r.setCurrentTerm(r.getCurrentTerm() + 1)
 
-	// Construct the request
+	// Construct the request 构造请求消息
 	lastIdx, lastTerm := r.getLastEntry()
 	req := &RequestVoteRequest{
 		RPCHeader:    r.getRPCHeader(),
@@ -1427,7 +1463,7 @@ func (r *Raft) electSelf() <-chan *voteResult {
 	for _, server := range r.configurations.latest.Servers {
 		if server.Suffrage == Voter {
 			if server.ID == r.localID {
-				// Persist a vote for ourselves
+				// Persist a vote for ourselves  给自己投一票
 				if err := r.persistVote(req.Term, req.Candidate); err != nil {
 					r.logger.Printf("[ERR] raft: Failed to persist vote : %v", err)
 					return nil
@@ -1442,6 +1478,7 @@ func (r *Raft) electSelf() <-chan *voteResult {
 					voterID: r.localID,
 				}
 			} else {
+				// 请求其他人给自己投票
 				askPeer(server)
 			}
 		}

@@ -40,7 +40,7 @@ type followerReplication struct {
 	// removed from the cluster. In the follower removed case, it carries a log
 	// index; replication should be attempted with a best effort up through that
 	// index, before exiting.
-	// 当leader辞职或者follower被从集群中移除会通知或关闭stopch。在追随者移除场景下，stopch
+	// 当leader辞职或者follower被从集群中移除会通知或关闭stopch。在追随者被移除场景下，stopch
 	// 里是日志索引；在退出之前，应尽最大努力尝试进行复制这个日志索引。
 	stopCh chan uint64
 	// triggerCh is notified every time new entries are appended to the log.

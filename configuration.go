@@ -74,10 +74,10 @@ const (
 	// 本期没有Staging状态，在AddStaging命令执行时会直接将服务器设置为Voter状态
 	AddStaging ConfigurationChangeCommand = iota
 	// AddNonvoter makes a server Nonvoter unless its Staging or Voter.
-	// 将服务器设置为Nonvoter，触发他是Staging或Voter
+	// 将服务器设置为Nonvoter，除非他是Staging或Voter
 	AddNonvoter
 	// DemoteVoter makes a server Nonvoter unless its absent.
-	// 将服务器降级为Nonvoter状态，触发他已被移除
+	// 将服务器降级为Nonvoter状态，除非他已被移除
 	DemoteVoter
 	// RemoveServer removes a server entirely from the cluster membership.
 	// 将服务器从集群成员中移除

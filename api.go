@@ -423,6 +423,7 @@ func HasExistingState(logs LogStore, stable StableStore, snaps SnapshotStore) (b
 // as implementations of various interfaces that are required. If we have any
 // old state, such as snapshots, logs, peers, etc, all those will be restored
 // when creating the Raft node.
+// 新建一个raft节点
 func NewRaft(conf *Config, fsm FSM, logs LogStore, stable StableStore, snaps SnapshotStore, trans Transport) (*Raft, error) {
 	// Validate the configuration.
 	if err := ValidateConfig(conf); err != nil {
@@ -702,6 +703,7 @@ func (r *Raft) Barrier(timeout time.Duration) Future {
 // VerifyLeader is used to ensure the current node is still
 // the leader. This can be done to prevent stale reads when a
 // new leader has potentially been elected.
+// 检查是否还是Leader节点
 func (r *Raft) VerifyLeader() Future {
 	metrics.IncrCounter([]string{"raft", "verify_leader"}, 1)
 	verifyFuture := &verifyFuture{}
@@ -717,6 +719,7 @@ func (r *Raft) VerifyLeader() Future {
 // GetConfiguration returns the latest configuration and its associated index
 // currently in use. This may not yet be committed. This must not be called on
 // the main thread (which can access the information directly).
+// 获取最新配置（配置可能是未提交的配置）
 func (r *Raft) GetConfiguration() ConfigurationFuture {
 	configReq := &configurationsFuture{}
 	configReq.init()
@@ -731,6 +734,7 @@ func (r *Raft) GetConfiguration() ConfigurationFuture {
 
 // AddPeer (deprecated) is used to add a new peer into the cluster. This must be
 // run on the leader or it will fail. Use AddVoter/AddNonvoter instead.
+// 向集群中添加一个节点。必须在leader节点上调用，否则会失败
 func (r *Raft) AddPeer(peer ServerAddress) Future {
 	if r.protocolVersion > 2 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -748,6 +752,7 @@ func (r *Raft) AddPeer(peer ServerAddress) Future {
 // current leader is being removed, it will cause a new election
 // to occur. This must be run on the leader or it will fail.
 // Use RemoveServer instead.
+// 从集群中移除一个节点。如果当前leader节点被移除，会触发一轮新的选举。
 func (r *Raft) RemovePeer(peer ServerAddress) Future {
 	if r.protocolVersion > 2 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -768,6 +773,7 @@ func (r *Raft) RemovePeer(peer ServerAddress) Future {
 // another configuration entry has been added in the meantime, this request will
 // fail. If nonzero, timeout is how long this server should wait before the
 // configuration change log entry is appended.
+// 添加一个跟定服务器到集群中作为Staging Server。如果要添加的服务器已经存在，则更新服务器地址。
 func (r *Raft) AddVoter(id ServerID, address ServerAddress, prevIndex uint64, timeout time.Duration) IndexFuture {
 	if r.protocolVersion < 2 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -786,6 +792,7 @@ func (r *Raft) AddVoter(id ServerID, address ServerAddress, prevIndex uint64, ti
 // elections or log entry commitment. If the server is already in the cluster,
 // this updates the server's address. This must be run on the leader or it will
 // fail. For prevIndex and timeout, see AddVoter.
+// 添加一个非投票节点
 func (r *Raft) AddNonvoter(id ServerID, address ServerAddress, prevIndex uint64, timeout time.Duration) IndexFuture {
 	if r.protocolVersion < 3 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -802,6 +809,7 @@ func (r *Raft) AddNonvoter(id ServerID, address ServerAddress, prevIndex uint64,
 // RemoveServer will remove the given server from the cluster. If the current
 // leader is being removed, it will cause a new election to occur. This must be
 // run on the leader or it will fail. For prevIndex and timeout, see AddVoter.
+// 从集群中移除一个节点。如果当前leader节点被移除，会触发一轮新的选举。
 func (r *Raft) RemoveServer(id ServerID, prevIndex uint64, timeout time.Duration) IndexFuture {
 	if r.protocolVersion < 2 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -819,6 +827,7 @@ func (r *Raft) RemoveServer(id ServerID, prevIndex uint64, timeout time.Duration
 // elections or log entry commitment. If the server is not in the cluster, this
 // does nothing. This must be run on the leader or it will fail. For prevIndex
 // and timeout, see AddVoter.
+// 将服务器降级为nonvoter。
 func (r *Raft) DemoteVoter(id ServerID, prevIndex uint64, timeout time.Duration) IndexFuture {
 	if r.protocolVersion < 3 {
 		return errorFuture{ErrUnsupportedProtocol}
@@ -834,6 +843,7 @@ func (r *Raft) DemoteVoter(id ServerID, prevIndex uint64, timeout time.Duration)
 // Shutdown is used to stop the Raft background routines.
 // This is not a graceful operation. Provides a future that
 // can be used to block until all background routines have exited.
+// 关闭raft后台协程。返回一个future，可以用来阻塞等待所有后台协程都退出成功
 func (r *Raft) Shutdown() Future {
 	r.shutdownLock.Lock()
 	defer r.shutdownLock.Unlock()
@@ -852,6 +862,7 @@ func (r *Raft) Shutdown() Future {
 // Snapshot is used to manually force Raft to take a snapshot. Returns a future
 // that can be used to block until complete, and that contains a function that
 // can be used to open the snapshot.
+// 用于人工强制raft进行快照。返回一个future用于等待操作完成，返回一个函数可用于打开快照
 func (r *Raft) Snapshot() SnapshotFuture {
 	future := &userSnapshotFuture{}
 	future.init()
