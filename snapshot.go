@@ -44,6 +44,7 @@ type SnapshotStore interface {
 	// Create is used to begin a snapshot at a given index and term, and with
 	// the given committed configuration. The version parameter controls
 	// which snapshot version to create.
+	// 创建一个快照，使用外部传入的index、term和配置
 	Create(version SnapshotVersion, index, term uint64, configuration Configuration,
 		configurationIndex uint64, trans Transport) (SnapshotSink, error)
 
@@ -127,6 +128,7 @@ func (r *Raft) shouldSnapshot() bool {
 // takeSnapshot is used to take a new snapshot. This must only be called from
 // the snapshot thread, never the main thread. This returns the ID of the new
 // snapshot, along with an error.
+// 进行快照，返回新快照的ID
 func (r *Raft) takeSnapshot() (string, error) {
 	defer metrics.MeasureSince([]string{"raft", "snapshot", "takeSnapshot"}, time.Now())
 
@@ -205,7 +207,7 @@ func (r *Raft) takeSnapshot() (string, error) {
 	// Update the last stable snapshot info.
 	r.setLastSnapshot(snapReq.index, snapReq.term)
 
-	// Compact the logs.
+	// Compact the logs. 压缩日志
 	if err := r.compactLogs(snapReq.index); err != nil {
 		return "", err
 	}
@@ -234,6 +236,7 @@ func (r *Raft) compactLogs(snapIdx uint64) error {
 	// back from the head, which ever is further back. This ensures
 	// at least `TrailingLogs` entries, but does not allow logs
 	// after the snapshot to be removed.
+	// maxLog必须小于snapIdx
 	maxLog := min(snapIdx, lastLogIdx-r.conf.TrailingLogs)
 
 	// Log this

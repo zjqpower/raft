@@ -717,7 +717,7 @@ func (n *netPipeline) AppendEntries(args *AppendEntriesRequest, resp *AppendEntr
 		n.conn.conn.SetWriteDeadline(time.Now().Add(timeout))
 	}
 
-	// Send the RPC 发送请求
+	// Send the RPC 发送请求，不收应答
 	if err := sendRPC(n.conn, rpcAppendEntries, future.args); err != nil {
 		return nil, err
 	}

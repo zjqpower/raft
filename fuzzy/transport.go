@@ -282,6 +282,7 @@ func (e *appendEntry) Respond(err error) {
 	e.consumer <- e
 }
 
+// 管道，用于加速日志复制
 type pipeline struct {
 	t        *transport
 	target   raft.ServerAddress

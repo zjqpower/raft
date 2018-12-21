@@ -116,6 +116,7 @@ func encodeMsgPack(in interface{}) (*bytes.Buffer, error) {
 // backoff is used to compute an exponential backoff
 // duration. Base time is scaled by the current round,
 // up to some maximum scale factor.
+// backoff用于计算一个指数级的backoff时间。
 func backoff(base time.Duration, round, limit uint64) time.Duration {
 	power := min(round, limit)
 	for power > 2 {

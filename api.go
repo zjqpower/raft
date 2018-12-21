@@ -111,7 +111,7 @@ type Raft struct {
 	leaderCh chan bool
 
 	// leaderState used only while state is leader
-	// leader状态，当节点为leader是有效
+	// leader状态，当节点为leader时有效
 	leaderState leaderState
 
 	// Stores our local server ID, used to avoid sending RPCs to ourself
@@ -889,6 +889,8 @@ func (r *Raft) Snapshot() SnapshotFuture {
 // install snapshot process. This involves a potentially dangerous period where
 // the leader commits ahead of its followers, so should only be used for disaster
 // recovery into a fresh cluster, and should not be used in normal operations.
+// 用于强制raft恢复一个外部快照
+// 警告：这个操作应该仅用于灾难恢复，而不能作为一个常规操作
 func (r *Raft) Restore(meta *SnapshotMeta, reader io.Reader, timeout time.Duration) error {
 	metrics.IncrCounter([]string{"raft", "restore"}, 1)
 	var timer <-chan time.Time

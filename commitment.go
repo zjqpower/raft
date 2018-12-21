@@ -8,7 +8,7 @@ import (
 // Commitment is used to advance the leader's commit index. The leader and
 // replication goroutines report in newly written entries with Match(), and
 // this notifies on commitCh when the commit index has advanced.
-// 用于增加leader的已提交索引号。当已提交索引号增加时通知commitCh
+// 用于增加leader的已提交索引号。当可提交索引号增加时通知commitCh
 type commitment struct {
 	// protects matchIndexes and commitIndex
 	sync.Mutex
@@ -16,10 +16,10 @@ type commitment struct {
 	// 当commitIndex增加时，通知commitCh
 	commitCh chan struct{}
 	// voter ID to log index: the server stores up through this log entry
-	// map[具有投票权的服务器ID] 该服务器上的日志索引号
+	// 数据结构：map[具有投票权的服务器ID]， 该服务器上已复制的最大日志索引号
 	matchIndexes map[ServerID]uint64
 	// a quorum stores up through this log entry. monotonically increases.
-	// 已提交的日志条目的数量.单调增
+	// 可提交的日志索引.单调增
 	commitIndex uint64
 	// the first index of this leader's term: this needs to be replicated to a
 	// majority of the cluster before this leader may mark anything committed

@@ -140,10 +140,10 @@ type configurations struct {
 	committedIndex uint64
 	// latest is the latest configuration in the log/snapshot (may be committed
 	// or uncommitted)
-	// 最新的日志（可能已提交、也可能未提交）
+	// 最新的配置（可能已提交、也可能未提交）
 	latest Configuration
 	// latestIndex is the log index where 'latest' was written.
-	// 最新的日志索引
+	// 最新的配置索引
 	latestIndex uint64
 }
 

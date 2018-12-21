@@ -387,6 +387,7 @@ func (r *Raft) runLeader() {
 		}
 
 		// Clear all the state
+		// leaderState应该提供一个clear函数
 		r.leaderState.commitCh = nil
 		r.leaderState.commitment = nil
 		r.leaderState.inflight = nil
@@ -429,6 +430,7 @@ func (r *Raft) runLeader() {
 	// an unbounded number of uncommitted configurations in the log. We now
 	// maintain that there exists at most one uncommitted configuration entry in
 	// any log, so we have to do proper no-ops here.
+	// 先插入一条空日志
 	noop := &logFuture{
 		log: Log{
 			Type: LogNoop,
@@ -517,6 +519,7 @@ func (r *Raft) leaderLoop() {
 	// of peers.
 	stepDown := false
 
+	// LeaderLeaseTimeout: leader租约超时时间
 	lease := time.After(r.conf.LeaderLeaseTimeout)
 	for r.getState() == Leader {
 		select {
@@ -905,6 +908,7 @@ func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 	r.setLastLog(lastIndex, term)
 
 	// Notify the replicators of the new log
+	// 通知开始复制日志
 	for _, f := range r.leaderState.replState {
 		asyncNotifyCh(f.triggerCh)
 	}
@@ -1488,6 +1492,7 @@ func (r *Raft) electSelf() <-chan *voteResult {
 }
 
 // persistVote is used to persist our vote for safety.
+// 保存投票信息到稳定存储中
 func (r *Raft) persistVote(term uint64, candidate []byte) error {
 	if err := r.stable.SetUint64(keyLastVoteTerm, term); err != nil {
 		return err
