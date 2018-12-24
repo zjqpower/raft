@@ -54,6 +54,7 @@ type FSMSnapshot interface {
 // runFSM is a long running goroutine responsible for applying logs
 // to the FSM. This is done async of other logs since we don't want
 // the FSM to block our internal operations.
+/* 异步执行日志到FSM。异步处理日志的目的是不希望FSM阻塞内部操作*/
 func (r *Raft) runFSM() {
 	var lastIndex, lastTerm uint64
 

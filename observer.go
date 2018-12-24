@@ -26,6 +26,8 @@ var nextObserverID uint64
 // FilterFn is a function that can be registered in order to filter observations.
 // The function reports whether the observation should be included - if
 // it returns false, the observation will be filtered out.
+/* FilterFn是为了过滤观察结果而注册的函数。这个函数确定观察结果是否应该被包含 - 如果他返回
+   false，则观察结果将被过滤掉。*/
 type FilterFn func(o *Observation) bool
 
 // Observer describes what to do with a given observation.
@@ -37,10 +39,12 @@ type Observer struct {
 	numDropped  uint64
 
 	// channel receives observations.
+	// 接收观察结果的通道
 	channel chan Observation
 
 	// blocking, if true, will cause Raft to block when sending an observation
 	// to this observer. This should generally be set to false.
+	// 如果为true，在发送观察结果给这个观察者是会导致raft阻塞。通常应该被设置为false。
 	blocking bool
 
 	// filter will be called to determine if an observation should be sent to
@@ -49,6 +53,7 @@ type Observer struct {
 	filter FilterFn
 
 	// id is the ID of this observer in the Raft map.
+	// 观察者唯一标识
 	id uint64
 }
 
@@ -93,6 +98,7 @@ func (r *Raft) DeregisterObserver(or *Observer) {
 }
 
 // observe sends an observation to every observer.
+// 将观察结果发送给每个观察者
 func (r *Raft) observe(o interface{}) {
 	// In general observers should not block. But in any case this isn't
 	// disastrous as we only hold a read lock, which merely prevents
@@ -103,9 +109,11 @@ func (r *Raft) observe(o interface{}) {
 		// It's wasteful to do this in the loop, but for the common case
 		// where there are no observers we won't create any objects.
 		ob := Observation{Raft: r, Data: o}
+		// filter返回false，过滤掉观察结果
 		if or.filter != nil && !or.filter(&ob) {
 			continue
 		}
+		// 通道为nil
 		if or.channel == nil {
 			continue
 		}

@@ -84,12 +84,14 @@ func (c *commitment) match(server ServerID, matchIndex uint64) {
 	defer c.Unlock()
 	if prev, hasVote := c.matchIndexes[server]; hasVote && matchIndex > prev {
 		c.matchIndexes[server] = matchIndex
+		// 计算哪些日志需要提交到fsm
 		c.recalculate()
 	}
 }
 
 // Internal helper to calculate new commitIndex from matchIndexes.
 // Must be called with lock held.
+// 计算哪些日志可以提交
 func (c *commitment) recalculate() {
 	if len(c.matchIndexes) == 0 {
 		return
@@ -99,10 +101,12 @@ func (c *commitment) recalculate() {
 	for _, idx := range c.matchIndexes {
 		matched = append(matched, idx)
 	}
+
+	// 取所以follower总已复制的日志索引的中间值作为要提提交的日志水位
 	sort.Sort(uint64Slice(matched))
 	quorumMatchIndex := matched[(len(matched)-1)/2]
 
-	// ???? zjq
+	// 必须大于当前已提交的日志索引值和领导者初始日志索引值
 	if quorumMatchIndex > c.commitIndex && quorumMatchIndex >= c.startIndex {
 		c.commitIndex = quorumMatchIndex
 		asyncNotifyCh(c.commitCh)

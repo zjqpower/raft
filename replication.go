@@ -183,6 +183,7 @@ func (r *Raft) replicateTo(s *followerReplication, lastIndex uint64) (shouldStop
 	var start time.Time
 START:
 	// Prevent an excessive retry rate on errors
+	// 防止错误重试过于频繁
 	if s.failures > 0 {
 		select {
 		case <-time.After(backoff(failureWait, s.failures, maxFailureScale)):
@@ -373,7 +374,7 @@ func (r *Raft) heartbeat(s *followerReplication, stopCh chan struct{}) {
 		}
 
 		start := time.Now()
-		// 同步函数 
+		// 同步函数
 		if err := r.trans.AppendEntries(s.peer.ID, s.peer.Address, &req, &resp); err != nil {
 			r.logger.Printf("[ERR] raft: Failed to heartbeat to %v: %v", s.peer.Address, err)
 			failures++
@@ -571,9 +572,10 @@ func appendStats(peer string, start time.Time, logs float32) {
 }
 
 // handleStaleTerm is used when a follower indicates that we have a stale term.
+// follower告诉你的任期已经是旧的了，要失去leader身份了
 func (r *Raft) handleStaleTerm(s *followerReplication) {
 	r.logger.Printf("[ERR] raft: peer %v has newer term, stopping replication", s.peer)
-	// 通知所有人，我不在是leader
+	// 通知所有人，我不再是leader
 	s.notifyAll(false) // No longer leader
 	asyncNotifyCh(s.stepDown)
 }
@@ -587,9 +589,11 @@ func updateLastAppended(s *followerReplication, req *AppendEntriesRequest) {
 	if logs := req.Entries; len(logs) > 0 {
 		last := logs[len(logs)-1]
 		s.nextIndex = last.Index + 1
+		// 更新follower机上已复制的日志索引值
 		s.commitment.match(s.peer.ID, last.Index)
 	}
 
 	// Notify still leader
+	// 通知我们仍然是leader
 	s.notifyAll(true)
 }

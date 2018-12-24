@@ -81,8 +81,8 @@ type commitTuple struct {
 // leader状态
 type leaderState struct {
 	commitCh   chan struct{}
-	commitment *commitment
-	inflight   *list.List // list of logFuture in log index order
+	commitment *commitment // 提交状态
+	inflight   *list.List  // list of logFuture in log index order
 	replState  map[ServerID]*followerReplication
 	notify     map[*verifyFuture]struct{}
 	stepDown   chan struct{}
@@ -893,6 +893,7 @@ func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 	}
 
 	// Write the log entry locally
+	// 保存到本地logStore
 	if err := r.logs.StoreLogs(logs); err != nil {
 		// 保存日志失败
 		r.logger.Printf("[ERR] raft: Failed to commit logs: %v", err)
@@ -1195,6 +1196,7 @@ func (r *Raft) processConfigurationLogEntry(entry *Log) {
 // requestVote is invoked when we get an request vote RPC call.
 func (r *Raft) requestVote(rpc RPC, req *RequestVoteRequest) {
 	defer metrics.MeasureSince([]string{"raft", "rpc", "requestVote"}, time.Now())
+	// 将投票请求发送给每个观察者
 	r.observe(*req)
 
 	// Setup a response
